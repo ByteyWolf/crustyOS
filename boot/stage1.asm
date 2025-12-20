@@ -1,8 +1,8 @@
 [BITS 16]
 [ORG 0x8000]
 
-mov ah, 0x00      ; BIOS function: set video mode
-mov al, 0x03      ; 80x25 text mode
+mov ah, 0x00
+mov al, 0x03
 int 0x10
 mov si, msg
 

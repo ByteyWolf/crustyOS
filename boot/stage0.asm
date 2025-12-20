@@ -33,16 +33,16 @@ boot_start:
     int 0x13
 
 
-    mov bx, 0x8000      ; ES:BX = destination
-    mov ah, 0x02        ; BIOS read
-    mov al, 3           ; number of sectors
-    mov ch, 0           ; cylinder 0
-    mov cl, 2           ; sector 2 (first stage1 sector!)
-    mov dh, 0           ; head 0
+    mov bx, 0x8000
+    mov ah, 0x02
+    mov al, 3
+    mov ch, 0
+    mov cl, 2
+    mov dh, 0
 
     int 0x13
 
-    jc disk_error       ; carry flag = error
+    jc disk_error
 
     jmp 0x0000:0x8000
 
