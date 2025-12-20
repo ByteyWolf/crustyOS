@@ -44,25 +44,63 @@ boot_start:
 
     jc disk_error
 
+    mov ah, 0x00
+    mov al, 0x03
+    int 0x10
+
+    ; fill background
+    mov ax, 0xB800
+    mov es, ax
+    mov ax, 0x1F20
+    mov cx, 2000
+
+    xor di, di
+
+    rep stosw
+
+    ; let's enable a20
+    in al, 0x64
+    .wait1:
+    test al, 2
+    jnz .wait1
+    mov al, 0xD1
+    out 0x64, al
+    .wait2:
+    in al, 0x64
+    test al, 2
+    jnz .wait2
+    mov al, 0xDF
+    out 0x60, al
+
     jmp 0x0000:0x8000
 
 disk_error:
     mov si, errmsg
-    .print_loop:
-        lodsb
-        cmp al, 0
-        je .done
-        mov ah, 0x0E
-        mov bh, 0x00
-        mov bl, 0x02
-        int 0x10
-        jmp .print_loop
-
+    call print_loop
     .done:
-        hlt
-        jmp .done
+    hlt
+    jmp .done
 
-errmsg db "READ FAIL", 0
+times 0xA0-($-$$) db 0
+print_loop:
+    lodsb
+    cmp al, 0
+    je .done
+    mov ah, 0x0E
+    mov bh, 0x00
+    mov bl, 0x02
+    int 0x10
+    jmp print_loop
+    .done:
+    ret
+
+times 0xC0-($-$$) db 0
+stage0msg db "CrustyOS Loader v1.0", 13, 10, 0
+errmsg db "Disk read failure", 0
+debugmsg db "FATsize/FATcount/Reserved: ", 0
+failmsg db "OSINIT not found. Cannot boot!", 0
+successmsg db "OSINIT found at cluster ", 0
+osinitname db "OSINIT      "
 
 times 510-($-$$) db 0
 dw 0xAA55

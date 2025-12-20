@@ -39,9 +39,8 @@ $(IMAGE): $(STAGE0) $(STAGE1) | $(BUILD)
 	$(MKFS) -F 12 -R $(RESERVED) $@
 	$(DD) if=$(STAGE0) of=$@ bs=$(SECTOR) count=1 conv=notrunc status=none
 	$(DD) if=$(STAGE1) of=$@ bs=$(SECTOR) seek=1 conv=notrunc status=none
-	@for f in $(FS)/*; do \
-	  [ -f "$$f" ] && $(MCOPY) -i $@ "$$f" ::$$(basename "$$f") >/dev/null 2>&1; \
-	done
+	@$(MCOPY) -i $@ -s $(FS)/* :: >/dev/null 2>&1
+
 
 .PHONY: run
 run: $(IMAGE)
