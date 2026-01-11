@@ -7,7 +7,7 @@ call 0x7CA0
 load_fat12:
     mov [driveid], dl
 
-
+    ; we need to find out fat data first
     mov ax, [0x7C18]
     mov [numsectorspertrack], ax
     mov ax, [0x7C1A]
@@ -24,13 +24,34 @@ load_fat12:
     mov [nummaxrootentries], dx
 
     mov ax, dx
-    mov bx, 32              ; bytes per entry
-    mul bx                  ; AX = total bytes for root
-    mov bx, 512             ; bytes per sector
-    cwd                     ; DX:AX for division
-    div bx                  ; AX = number of root sectors
+    mov bx, 32
+    mul bx
+    mov bx, 512
+    cwd
+    div bx
     mov [rootsectors], ax
 
+load_fat:
+    mov ax, [numreserved]
+    ;inc ax
+    call lba2chs
+
+    xor ax, ax
+    mov es, ax
+    mov bx, fat_buffer
+    mov ah, 2
+    mov al, [numsectorsperfat]
+    mov dl, [driveid]
+    int 0x13
+    jc disk_error
+
+    ; debug: print the first bytes of the fat
+    mov si, fat_buffer
+    mov dx, 1024
+    call printtimes
+    call newline
+
+find_osinit:
     mov si, 0x7CE9
     call 0x7CA0
 
@@ -64,7 +85,6 @@ load_fat12:
     call lba2chs
 
 
-
     .readextra:
     mov [fileid], 0
 
@@ -74,7 +94,7 @@ load_fat12:
     xor ax, ax
     mov es, ax
     mov dl, [driveid]
-    mov bx, 0x9000
+    mov bx, scratchspace
     mov ah, 2
     mov al, 1
 
@@ -83,7 +103,7 @@ load_fat12:
 
     jc disk_error
 
-    mov si, 0x9000
+    mov si, scratchspace
 
     ; at this point we have 16 files loaded
     .nextfile:
@@ -163,65 +183,94 @@ load_fat12:
     mov ax, [si+28]
     push ax
 
-    mov ax, [numfats]
+    mov al, [numfats]
+    cbw
     mul word [numsectorsperfat]
     add ax, [numreserved]
     add ax, [rootsectors]
-    mov bx, ax
+    mov [data_lba], ax
 
+    mov bx, osinit_buffer & 0xFFFF
+    mov ax, osinit_buffer >> 4
+    mov es, ax
+    mov [crt_reading], bx
+
+.load_cluster:
+    cmp cx, 0xFF8
+    jae .done
+
+    mov ax, [data_lba] ;0x0024
+
+
+    push cx
     mov ax, cx
     sub ax, 2
-    add ax, bx
-
+    add ax, [data_lba]
     call lba2chs
-
-
-    xor ax, ax
-    mov es, ax
-    mov dl, [driveid]
-    mov bx, 0x9000
+    
+    mov bx, [crt_reading]
     mov ah, 2
     mov al, 1
-
-
+    mov dl, [driveid]
     int 0x13
-
     jc disk_error
+    pop cx
 
-    mov si, 0x9000
+    add bx, 512
+    mov [crt_reading], bx
+    jnc .no_wrap
+    mov ax, es
+    add ax, 0x20
+    mov es, ax
+.no_wrap:
+    call fat12_next_cluster
+    mov cx, ax
+    jmp .load_cluster
+.done:
+    mov si, osinit_buffer & 0xFFFF
+    mov ax, osinit_buffer >> 4
+    mov ds, ax
     pop dx
     call printtimes
-
-    call newline
-
+    ; so at this point we have a loaded osinit
+    ; so let's start doing memory map and then
+    ; we gotta switch to protected mode
+    ; and jump to it
     hlt
     jmp $
 
 
+fat12_next_cluster:
+    mov ax, cx
+    mov bx, 3
+    mul bx
+    shr ax, 1           ; compute offset = cluster * 3 / 2
 
+    mov si, fat_buffer
+    add si, ax          ; SI = pointer to FAT entry
 
-driveid db 0
-fileid db 0
-numheads dw 0
-numsectorspertrack dw 0
+    mov ax, [si]        ; read 16 bits from FAT
 
-numsectorsperfat dw 0
-numfats db 0
-numreserved dw 0
-nummaxrootentries dw 0
+    test cx, 1
+    jz .even
+    shr ax, 4           ; odd cluster uses high 12 bits
+    jmp .out
+.even:
+    and ax, 0x0FFF      ; even cluster uses low 12 bits
+.out:
+    ret
 
-rootsectors dw 0
 
 lba2chs:
     xor dx, dx
-    mov bx, 18          ; sectors per track
+    mov bx, [numsectorspertrack]          ; sectors per track
     div bx              ; AX = temp, DX = remainder
 
     inc dx              ; sector = remainder + 1
     mov cl, dl          ; CL = sector
 
     xor dx, dx
-    mov bx, 2           ; heads
+    mov bx, [numheads]           ; heads
     div bx              ; AX = cylinder, DX = head
 
     mov ch, al          ; cylinder
@@ -278,9 +327,8 @@ print_hex_nibble:
 disk_error:
     mov si, 0x7CD7
     call 0x7CA0
-    .done:
     hlt
-    jmp .done
+    jmp $
 
 printtimes:
 
@@ -295,5 +343,26 @@ printtimes:
     jmp printtimes
     .done:
         ret
+
+
+driveid db 0
+fileid db 0
+numheads dw 0
+numsectorspertrack dw 0
+
+numsectorsperfat dw 0
+numfats db 0
+numreserved dw 0
+nummaxrootentries dw 0
+
+data_lba dw 0
+
+rootsectors dw 0
+fat_buffer equ 0x9000
+osinit_buffer equ 0x10000
+
+crt_reading dw 0
+
+scratchspace equ $
 
 times (512*3) - ($-$$) db 0
