@@ -45,12 +45,6 @@ load_fat:
     int 0x13
     jc disk_error
 
-    ; debug: print the first bytes of the fat
-    mov si, fat_buffer
-    mov dx, 1024
-    call printtimes
-    call newline
-
 find_osinit:
     mov si, 0x7CE9
     call 0x7CA0
@@ -180,9 +174,6 @@ find_osinit:
     cmp cx, 0
     je .notfound
 
-    mov ax, [si+28]
-    push ax
-
     mov al, [numfats]
     cbw
     mul word [numsectorsperfat]
@@ -227,18 +218,13 @@ find_osinit:
     mov cx, ax
     jmp .load_cluster
 .done:
-    mov si, osinit_buffer & 0xFFFF
-    mov ax, osinit_buffer >> 4
-    mov ds, ax
-    pop dx
-    call printtimes
     ; so at this point we have a loaded osinit
     ; so let's start doing memory map and then
     ; we gotta switch to protected mode
     ; and jump to it
 memorymap:
     xor bx, bx         
-    mov ds, ax
+    mov ds, bx
     mov ax, fat_buffer >> 4
     mov es, ax
     xor si, si
@@ -258,6 +244,10 @@ memorymap:
 
 memdone:
     ; it's time to go into 32-bit mode and enter osinit
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+
     lgdt [gdt_descriptor]
     cli
     mov eax, cr0
@@ -266,6 +256,7 @@ memdone:
     
     jmp 0x08:pm_entry
 
+[BITS 32]
 pm_entry:
     mov ax, 0x10
     mov ds, ax
@@ -276,12 +267,11 @@ pm_entry:
 
     mov esp, 0x8000 ; use our stage 0 bootloader code area as stack
 
-    
-
     mov eax, osinit_buffer
     jmp eax
 
 
+[BITS 16]
 fat12_next_cluster:
     mov ax, cx
     mov bx, 3
@@ -371,20 +361,6 @@ disk_error:
     call 0x7CA0
     hlt
     jmp $
-
-printtimes:
-
-    cmp dx, 0
-    je .done
-    dec dx
-    lodsb
-    mov ah, 0x0E
-    mov bh, 0x00
-    mov bl, 0x02
-    int 0x10
-    jmp printtimes
-    .done:
-        ret
 
 
 driveid db 0
