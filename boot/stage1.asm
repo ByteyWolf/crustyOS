@@ -225,14 +225,13 @@ find_osinit:
 memorymap:
     xor bx, bx         
     mov ds, bx
-    xor ax, ax
-    mov es, ax
-    mov si, fat_buffer
+    mov es, bx
+    mov di, fat_buffer
 
 .nextentry:
     mov ax, 0xE820
-    mov dx, 0x534D
-    mov cx, 24
+    mov edx, 0x534D4150
+    mov ecx, 24
     int 0x15
     jc memfail_carry
     cmp eax, 0x534D4150
