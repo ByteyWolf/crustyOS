@@ -225,24 +225,31 @@ find_osinit:
 memorymap:
     xor bx, bx         
     mov ds, bx
-    mov ax, fat_buffer >> 4
+    xor ax, ax
     mov es, ax
-    xor si, si
+    mov si, fat_buffer
 
 .nextentry:
     mov ax, 0xE820
     mov dx, 0x534D
-    mov cx, 20
+    mov cx, 24
     int 0x15
-    jc memdone
+    jc memfail_carry
     cmp eax, 0x534D4150
-    jne memdone
-    add si, 20
+    jne memfail_sigfail
+    add si, 24
     test bx, bx
     jnz .nextentry
-
+memfail_sigfail:
+    mov [0x9016], word 0xDEAD
+    jmp memdone
+memfail_carry:
+    mov [0x9016], word 0xDEAA
+    jmp memdone
 
 memdone:
+    ; let's add a memory map entry of type 0 to mark the end
+    mov [es:si + 16], eax
     ; it's time to go into 32-bit mode and enter osinit
     xor ax, ax
     mov ds, ax
