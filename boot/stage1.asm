@@ -236,8 +236,50 @@ find_osinit:
     ; so let's start doing memory map and then
     ; we gotta switch to protected mode
     ; and jump to it
-    hlt
-    jmp $
+memorymap:
+    xor bx, bx         
+    mov ds, ax
+    mov ax, fat_buffer >> 4
+    mov es, ax
+    xor si, si
+
+.nextentry:
+    mov ax, 0xE820
+    mov dx, 0x534D
+    mov cx, 20
+    int 0x15
+    jc memdone
+    cmp eax, 0x534D4150
+    jne memdone
+    add si, 20
+    test bx, bx
+    jnz .nextentry
+
+
+memdone:
+    ; it's time to go into 32-bit mode and enter osinit
+    lgdt [gdt_descriptor]
+    cli
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    
+    jmp 0x08:pm_entry
+
+pm_entry:
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    mov esp, 0x8000 ; use our stage 0 bootloader code area as stack
+
+    
+
+    mov eax, osinit_buffer
+    jmp eax
 
 
 fat12_next_cluster:
@@ -362,6 +404,33 @@ fat_buffer equ 0x9000
 osinit_buffer equ 0x10000
 
 crt_reading dw 0
+
+gdt:
+    ; null descriptor
+    dd 0
+    dd 0
+
+    ; code segment: base=0, limit=4GB, 0x9A, 0xCF
+    dw 0xFFFF          ; limit low
+    dw 0x0000          ; base low
+    db 0x00            ; base mid
+    db 0x9A            ; access
+    db 0xCF            ; granularity + limit high
+    db 0x00            ; base high
+
+    ; data segment: base=0, limit=4GB, 0x92, 0xCF
+    dw 0xFFFF
+    dw 0x0000
+    db 0x00
+    db 0x92
+    db 0xCF
+    db 0x00
+
+gdt_descriptor:
+    dw gdt_end - gdt - 1
+    dd gdt
+gdt_end:
+
 
 scratchspace equ $
 
