@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 struct memory_map_entry {
-    uint64_t base_addr;
+    uint64_t base;
     uint64_t length;
     uint32_t type;
     uint32_t acpi_ext_attrs;

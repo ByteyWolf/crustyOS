@@ -45,28 +45,7 @@ load_fat:
     int 0x13
     jc disk_error
 
-find_osinit:
-    mov si, 0x7CE9
-    call 0x7CA0
-
-    ; print sectors per fat
-    mov ax, [numsectorsperfat]
-    call print_hex16
-    mov ah, 0x0E
-    mov al, 0x20
-    int 0x10
-
-    mov al, [numfats]
-    call print_hex8
-    mov ah, 0x0E
-    mov al, 0x20
-    int 0x10
-
-    mov ax, [numreserved]
-    call print_hex16
-
-    call newline
-
+find_files:
     mov ax, [numsectorsperfat]
     mov bx, [numfats]
     mov cx, [numreserved]
@@ -104,23 +83,52 @@ find_osinit:
     mov ax, [fileid]
 
     cmp [si], 0
-    je .notfound
+    je searchfail
     cmp [si], 0xE5
     je .deleted
     mov al, [si+11]
     cmp al, 0x0F
     je .deleted
 
-    push si
-    ; string ptr in si
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+
+    cld
+    push si            ; save directory-entry pointer
+
     mov cx, 11
-    mov di, 0x7D3D
+    mov di, 0x7D3D     ; "OSINIT     "
     repe cmpsb
+    jnz .check_bootini  ; if not equal, check BOOT.INI
+
+    pop si              ; restore si
+    mov ax, osinit_buffer & 0xffff
+    mov bx, osinit_buffer >> 4
+    call readfile
+    cmp byte [files_found], 1
+    je loadkernel
+    jmp .continue_after_restore
+
+.check_bootini:
+    pop si              ; restore si (we still had original pushed)
+    push si             ; re-save for later increment
+    mov cx, 11
+    mov di, 0x7D49      ; "BOOT    INI"
+    repe cmpsb
+    jnz .continue_after_restore
+
     pop si
-    je .found
+    mov ax, bootini_buffer & 0xffff
+    mov bx, bootini_buffer >> 4
+    call readfile
+    cmp byte [files_found], 1
+    je loadkernel
 
-
+.continue_after_restore:
+    pop si
     add si, 32
+
 
     .nextfile__inc:
     mov al, [fileid]
@@ -133,15 +141,6 @@ find_osinit:
     .deleted:
     add si, 32
     jmp .nextfile__inc
-
-    .notfound:
-    call newline
-    call newline
-    mov si, 0x7D05
-    call 0x7CA0
-
-    hlt
-    jmp $
 
     .nextcyl:
     pop dx
@@ -159,36 +158,39 @@ find_osinit:
     inc ch
     jmp .readextra
 
-    .found:
-    push si
-    mov si, 0x7D24
+searchfail:
+    call newline
+    call newline
+    mov si, 0x7D05
     call 0x7CA0
-    pop si
 
-    mov ax, [si+26]
-    mov cx, ax
-    call print_hex16
-    call newline
-    call newline
+    hlt
+    jmp $
+
+
+
+readfile:
+    mov cx, [si+26]
 
     cmp cx, 0
-    je .notfound
+    je searchfail
 
+    push ax
+    push bx
     mov al, [numfats]
     cbw
     mul word [numsectorsperfat]
     add ax, [numreserved]
     add ax, [rootsectors]
     mov [data_lba], ax
-
-    mov bx, osinit_buffer & 0xFFFF
-    mov ax, osinit_buffer >> 4
-    mov es, ax
+    pop bx
+    pop ax
+    mov es, bx
     mov [crt_reading], bx
 
 .load_cluster:
     cmp cx, 0xFF8
-    jae .done
+    jae .donereading
 
     mov ax, [data_lba] ;0x0024
 
@@ -217,7 +219,10 @@ find_osinit:
     call fat12_next_cluster
     mov cx, ax
     jmp .load_cluster
-.done:
+.donereading:
+    inc [files_found]
+    ret
+loadkernel:
     ; so at this point we have a loaded osinit
     ; so let's start doing memory map and then
     ; we gotta switch to protected mode
@@ -227,28 +232,30 @@ memorymap:
     mov ds, bx
     mov es, bx
     mov di, fat_buffer
+    mov [0x8996], word 0x0000
 
 .nextentry:
-    mov ax, 0xE820
+    mov eax, 0xE820
     mov edx, 0x534D4150
     mov ecx, 24
     int 0x15
     jc memfail_carry
+    test bx, bx
+    jz memdone
     cmp eax, 0x534D4150
     jne memfail_sigfail
-    add si, 24
-    test bx, bx
-    jnz .nextentry
+    add di, 24
+    jmp .nextentry
 memfail_sigfail:
-    mov [0x9016], word 0xDEAD
+    mov [0x8996], word 0xDEAD
     jmp memdone
 memfail_carry:
-    mov [0x9016], word 0xDEAA
+    mov [0x8996], word 0xDEAA
     jmp memdone
 
 memdone:
     ; let's add a memory map entry of type 0 to mark the end
-    mov [es:si + 16], eax
+    mov [es:di + 16], eax
     ; it's time to go into 32-bit mode and enter osinit
     xor ax, ax
     mov ds, ax
@@ -383,9 +390,11 @@ data_lba dw 0
 
 rootsectors dw 0
 fat_buffer equ 0x9000
-osinit_buffer equ 0x10000
+bootini_buffer equ 0x10000
+osinit_buffer equ 0x10500
 
 crt_reading dw 0
+files_found db 0
 
 gdt:
     ; null descriptor

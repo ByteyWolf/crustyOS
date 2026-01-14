@@ -97,10 +97,11 @@ print_loop:
 times 0xC0-($-$$) db 0
 stage0msg db "CrustyOS Loader v1.0", 13, 10, 0
 errmsg db "Disk read failure", 0
-debugmsg db "FATsize/FATcount/Reserved: ", 0
+debugmsg db "READ   /FATcount/Reserved: ", 0
 failmsg db "OSINIT not found. Cannot boot!", 0
 successmsg db "OSINIT found at cluster ", 0
 osinitname db "OSINIT      "
+bootininame db "BOOT    INI"
 
 times 510-($-$$) db 0
 dw 0xAA55
