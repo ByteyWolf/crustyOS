@@ -5,7 +5,7 @@ void _start(void) {
 }
 
 #include <stdint.h>
-#include "mem.h"
+#include "mem/memman.h"
 
 volatile char* video = (volatile char*)0xB8000;
 static uint32_t pos = 0;
@@ -38,7 +38,7 @@ void kmain(void) {
     kputs_attr("CrustyOS", 0x0A);
     kputs("!\n");
     uint16_t resultsig = *(volatile uint16_t*)0x8996;
-    if (resultsig > 0xDEA9) {
+    if (resultsig != 0x0) {
         kputs_attr("Bootloader reported memory map failure.\nCrustyOS cannot continue.\n", 0x0C);
         kputs_attr("Error code: ", 0x0C);
         print_hex8((*((volatile uint8_t*)0x8996)));
@@ -55,8 +55,8 @@ void kmain(void) {
     }
     
     kputs("Memory map:\n");
-    volatile struct memory_map_entry* entry = (volatile struct memory_map_entry*)0x9000;
-    while (entry->type != 0) {
+    volatile struct bios_memory_map_entry* entry = (volatile struct bios_memory_map_entry*)0x9000;
+    while (entry->type != 0x0) {
         kputs(" Base: 0x");
         for (int i = 7; i >= 0; i--) {
             print_hex8((entry->base >> (i * 8)) & 0xFF);
@@ -68,7 +68,7 @@ void kmain(void) {
         kputs(" Type: ");
         print_hex8((uint8_t)(entry->type));
         kputs("\n");
-        entry = (volatile struct memory_map_entry*)((uintptr_t)entry + sizeof(struct memory_map_entry) + 4);
+        entry += 1;
     }
     while (1);
 }

@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-struct memory_map_entry {
+struct bios_memory_map_entry {
     uint64_t base;
     uint64_t length;
     uint32_t type;

@@ -255,6 +255,7 @@ memfail_carry:
 
 memdone:
     ; let's add a memory map entry of type 0 to mark the end
+    xor eax, eax
     mov [es:di + 16], eax
     ; it's time to go into 32-bit mode and enter osinit
     xor ax, ax
